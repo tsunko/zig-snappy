@@ -38,7 +38,7 @@ const SnappyError = error{
 // Perform the CRC hash per the snappy documentation. We must use wrapping addition since this is
 // the default behavior in other languages.
 fn crc(b: []const u8) u32 {
-    const c = crc32.Crc32SmallWithPoly(.Castagnoli);
+    const c = crc32.Crc32Iscsi;
     const hash = c.hash(b);
     return @as(u32, hash >> 15 | hash << 17) +% 0xa282ead8;
 }
@@ -172,7 +172,7 @@ fn runDecode(dst: []u8, src: []const u8) u8 {
                     return 1;
                 }
 
-                mem.copy(u8, dst[d..], src[s .. s + @as(usize, @intCast(length))]);
+                mem.copyForwards(u8, dst[d..], src[s .. s + @as(usize, @intCast(length))]);
                 const l = @as(usize, @intCast(length));
                 d += l;
                 s += l;
@@ -217,14 +217,14 @@ fn runDecode(dst: []u8, src: []const u8) u8 {
 
         if (offset >= length) {
             const upper_bound = d - @as(usize, @intCast(offset)) + @as(usize, @intCast(length));
-            mem.copy(u8, dst[d .. d + @as(usize, @intCast(length))], dst[d - @as(usize, @intCast(offset)) .. upper_bound]);
+            mem.copyForwards(u8, dst[d .. d + @as(usize, @intCast(length))], dst[d - @as(usize, @intCast(offset)) .. upper_bound]);
             d += @as(usize, @intCast(length));
             continue;
         }
 
         var a = dst[d .. d + @as(usize, @intCast(length))];
         var b = dst[d - @as(usize, @intCast(offset)) ..];
-        var aLen = a.len;
+        const aLen = a.len;
         b = b[0..aLen];
         for (a, 0..) |_, i| {
             a[i] = b[i];
@@ -244,11 +244,11 @@ fn runDecode(dst: []u8, src: []const u8) u8 {
 pub fn decode(allocator: Allocator, src: []const u8) ![]u8 {
     const block = try decodedLen(src);
 
-    var dst = try allocator.alloc(u8, block.blockLen);
+    const dst = try allocator.alloc(u8, block.blockLen);
     errdefer allocator.free(dst);
 
     // Skip past how many bytes we read to get the length.
-    var s = src[block.headerLen..];
+    const s = src[block.headerLen..];
 
     if (runDecode(dst, s) != 0) {
         return SnappyError.Corrupt;
@@ -278,7 +278,7 @@ fn emitLiteral(dst: []u8, lit: []const u8) usize {
             i = 3;
         },
     }
-    mem.copy(u8, dst[i..], lit);
+    mem.copyForwards(u8, dst[i..], lit);
 
     return i + @min(dst.len, lit.len);
 }
@@ -346,7 +346,7 @@ fn encodeBlock(dst: []u8, src: []u8) usize {
     }
 
     var table = mem.zeroes([maxTableSize]u16);
-    var sLimit = src.len - inputMargin;
+    const sLimit = src.len - inputMargin;
     var nextEmit: usize = 0;
     var s: usize = 1;
     var nextHash = snappyHash(load32(src, @as(isize, @intCast(s))), shift);
@@ -358,7 +358,7 @@ fn encodeBlock(dst: []u8, src: []u8) usize {
 
         inner: while (true) {
             s = nextS;
-            var bytesBetweenHashLookups = skip >> 5;
+            const bytesBetweenHashLookups = skip >> 5;
             nextS = s + @as(usize, @intCast(bytesBetweenHashLookups));
             skip += bytesBetweenHashLookups;
             if (nextS > sLimit) {
@@ -375,7 +375,7 @@ fn encodeBlock(dst: []u8, src: []u8) usize {
         d += emitLiteral(dst[d..], src[nextEmit..s]);
 
         while (true) {
-            var base = s;
+            const base = s;
             s += 4;
             var i = @as(usize, @intCast(candidate + 4));
             while (s < src.len and src[i] == src[s]) {
@@ -389,10 +389,10 @@ fn encodeBlock(dst: []u8, src: []u8) usize {
                 break :outer;
             }
 
-            var x = load64(src, @as(isize, @intCast(s - 1)));
-            var prevHash = snappyHash(@as(u32, @truncate(x >> 0)), shift);
+            const x = load64(src, @as(isize, @intCast(s - 1)));
+            const prevHash = snappyHash(@as(u32, @truncate(x >> 0)), shift);
             table[prevHash & tableMask] = @as(u16, @intCast(s - 1));
-            var currHash = snappyHash(@as(u32, @truncate(x >> 8)), shift);
+            const currHash = snappyHash(@as(u32, @truncate(x >> 8)), shift);
             candidate = @as(isize, @intCast(table[currHash & tableMask]));
             table[currHash & tableMask] = @as(u16, @intCast(s));
             if (@as(u32, @truncate(x >> 8)) != load32(src, candidate)) {
@@ -425,7 +425,7 @@ pub fn encode(allocator: Allocator, src: []u8) ![]u8 {
 
     while (mutSrc.len > 0) {
         var p = try allocator.alloc(u8, mutSrc.len);
-        mem.copy(u8, p, mutSrc);
+        mem.copyForwards(u8, p, mutSrc);
         var empty = [_]u8{};
         mutSrc = empty[0..];
         if (p.len > maxBlockSize) {
@@ -440,8 +440,8 @@ pub fn encode(allocator: Allocator, src: []u8) ![]u8 {
         allocator.free(p);
     }
 
-    var output = try allocator.alloc(u8, d);
-    mem.copy(u8, output, dst[0..d]);
+    const output = try allocator.alloc(u8, d);
+    mem.copyForwards(u8, output, dst[0..d]);
     allocator.free(dst);
 
     return output;
@@ -481,8 +481,8 @@ test "simple encode" {
     const allocator = testing.allocator;
 
     var input: [4]u8 = [_]u8{ 't', 'h', 'i', 's' };
-    var i: []u8 = &input;
-    var output = try encode(allocator, i);
+    const i: []u8 = &input;
+    const output = try encode(allocator, i);
     defer allocator.free(output);
 
     try testing.expectEqualSlices(u8, output, "\x04\x0cthis");
