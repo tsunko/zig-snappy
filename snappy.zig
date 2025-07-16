@@ -30,9 +30,9 @@ const chunkTypeStreamIdentifier = 0xff;
 
 // Various errors that may occur while decoding.
 const SnappyError = error{
-    Corrupt,
-    TooLarge,
-    Unsupported,
+Corrupt,
+TooLarge,
+Unsupported,
 };
 
 // Perform the CRC hash per the snappy documentation. We must use wrapping addition since this is
@@ -160,8 +160,8 @@ fn runDecode(dst: []u8, src: []const u8) u8 {
                     },
                     // Should be unreachable.
                     else => {
-                        return 1;
-                    },
+                    return 1;
+                },
                 }
                 length = @as(isize, x) + 1;
                 if (length <= 0) {
@@ -172,7 +172,7 @@ fn runDecode(dst: []u8, src: []const u8) u8 {
                     return 1;
                 }
 
-                mem.copyForwards(u8, dst[d..], src[s .. s + @as(usize, @intCast(length))]);
+                @memcpy(dst[d .. d + @as(usize, @intCast(length))], src[s .. s + @as(usize, @intCast(length))]);
                 const l = @as(usize, @intCast(length));
                 d += l;
                 s += l;
@@ -207,8 +207,8 @@ fn runDecode(dst: []u8, src: []const u8) u8 {
             },
             // Should be unreachable.
             else => {
-                return 1;
-            },
+            return 1;
+        },
         }
 
         if (offset <= 0 or d < offset or length > dst.len - d) {
@@ -217,7 +217,7 @@ fn runDecode(dst: []u8, src: []const u8) u8 {
 
         if (offset >= length) {
             const upper_bound = d - @as(usize, @intCast(offset)) + @as(usize, @intCast(length));
-            mem.copyForwards(u8, dst[d .. d + @as(usize, @intCast(length))], dst[d - @as(usize, @intCast(offset)) .. upper_bound]);
+            @memcpy(dst[d .. d + @as(usize, @intCast(length))], dst[d - @as(usize, @intCast(offset)) .. upper_bound]);
             d += @as(usize, @intCast(length));
             continue;
         }
@@ -278,7 +278,7 @@ fn emitLiteral(dst: []u8, lit: []const u8) usize {
             i = 3;
         },
     }
-    mem.copyForwards(u8, dst[i..], lit);
+    @memcpy(dst[i..][0..lit.len], lit);
 
     return i + @min(dst.len, lit.len);
 }
@@ -425,7 +425,7 @@ pub fn encode(allocator: Allocator, src: []u8) ![]u8 {
 
     while (mutSrc.len > 0) {
         var p = try allocator.alloc(u8, mutSrc.len);
-        mem.copyForwards(u8, p, mutSrc);
+        @memcpy(p, mutSrc);
         var empty = [_]u8{};
         mutSrc = empty[0..];
         if (p.len > maxBlockSize) {
@@ -441,7 +441,7 @@ pub fn encode(allocator: Allocator, src: []u8) ![]u8 {
     }
 
     const output = try allocator.alloc(u8, d);
-    mem.copyForwards(u8, output, dst[0..d]);
+    @memcpy(output, dst[0..d]);
     allocator.free(dst);
 
     return output;
