@@ -30,9 +30,9 @@ const chunkTypeStreamIdentifier = 0xff;
 
 // Various errors that may occur while decoding.
 const SnappyError = error{
-Corrupt,
-TooLarge,
-Unsupported,
+    Corrupt,
+    TooLarge,
+    Unsupported,
 };
 
 // Perform the CRC hash per the snappy documentation. We must use wrapping addition since this is
@@ -160,8 +160,8 @@ fn runDecode(dst: []u8, src: []const u8) u8 {
                     },
                     // Should be unreachable.
                     else => {
-                    return 1;
-                },
+                        return 1;
+                    },
                 }
                 length = @as(isize, x) + 1;
                 if (length <= 0) {
@@ -207,8 +207,8 @@ fn runDecode(dst: []u8, src: []const u8) u8 {
             },
             // Should be unreachable.
             else => {
-            return 1;
-        },
+                return 1;
+            },
         }
 
         if (offset <= 0 or d < offset or length > dst.len - d) {
